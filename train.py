@@ -246,10 +246,6 @@ def evaluate(model, val_loader, criterion, target_padding_idx):
     model.eval()
     total_loss = 0
 
-    bleu_metric = torchmetrics.text.BLEUScore().to(DEVICE)
-    chrf_metric = torchmetrics.text.CHRFScore().to(DEVICE)
-    wer_metric = torchmetrics.text.WordErrorRate().to(DEVICE)
-
     all_predictions = []
     all_targets = []
 
@@ -306,16 +302,31 @@ def evaluate(model, val_loader, criterion, target_padding_idx):
                 pred_text = model.decoder.sentence_embedding.tokenizer.decode(pred_tokens)
                 target_text = model.decoder.sentence_embedding.tokenizer.decode(target_tokens)
 
-                # Format for metrics calculation - these need to be strings, not pre-tokenized lists
+                # Add to predictions and targets lists
                 all_predictions.append(pred_text)
-                all_targets.append([target_text])  # List of references for each prediction
+                all_targets.append(target_text)  # Just the string, not a list containing the string
 
     avg_loss = total_loss / len(val_loader)
 
-    # Update metrics
-    bleu_score = bleu_metric(all_predictions, all_targets)
-    chrf_score = chrf_metric(all_predictions, all_targets)
-    wer_score = wer_metric(all_predictions, all_targets)
+    # Create metrics here to ensure they're fresh for each evaluation
+    bleu_metric = torchmetrics.text.BLEUScore().to(DEVICE)
+    chrf_metric = torchmetrics.text.CHRFScore().to(DEVICE)
+    wer_metric = torchmetrics.text.WordErrorRate().to(DEVICE)
+
+    # Wrap targets in list-of-lists for BLEU and CHRF
+    wrapped_targets = [[t] for t in all_targets]
+
+    # BLEU
+    bleu_metric.update(all_predictions, wrapped_targets)
+    bleu_score = bleu_metric.compute()
+
+    # CHRF
+    chrf_metric.update(all_predictions, wrapped_targets)
+    chrf_score = chrf_metric.compute()
+
+    # WER (expects flat list of strings)
+    wer_metric.update(all_predictions, all_targets)
+    wer_score = wer_metric.compute()
 
     model.train()
     return avg_loss, bleu_score, chrf_score, wer_score
@@ -366,7 +377,7 @@ def main():
         print("No validation files provided. Will split training data for validation.")
 
     # Limit data if needed
-    max_samples = 100000
+    max_samples = 1000
     src_sentences = src_sentences[:max_samples]
     tgt_sentences = tgt_sentences[:max_samples]
 
