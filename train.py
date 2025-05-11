@@ -289,10 +289,10 @@ def evaluate(model, val_loader, criterion, target_padding_idx):
 
             total_loss += loss.item()
 
-            # Get predicted tokens for BLEU calculation
+            # Get predicted tokens for metrics calculation
             pred_indices = torch.argmax(predictions, dim=-1)
 
-            # Convert token indices to text for BLEU calculation
+            # Convert token indices to text for metrics calculation
             for i in range(len(src_batch)):
                 # Get prediction and target sequences
                 pred_tokens = pred_indices[i].cpu().tolist()
@@ -306,18 +306,16 @@ def evaluate(model, val_loader, criterion, target_padding_idx):
                 pred_text = model.decoder.sentence_embedding.tokenizer.decode(pred_tokens)
                 target_text = model.decoder.sentence_embedding.tokenizer.decode(target_tokens)
 
-                # Format for BLEU calculation (required format: [['candidate']], [[['reference']]])
-                all_predictions.append([pred_text.split()])
-                all_targets.append([[target_text.split()]])
+                # Format for metrics calculation - these need to be strings, not pre-tokenized lists
+                all_predictions.append(pred_text)
+                all_targets.append([target_text])  # List of references for each prediction
 
     avg_loss = total_loss / len(val_loader)
 
-    bleu_metric.update(all_predictions, all_targets)
-    chrf_metric.update(all_predictions, all_targets)
-    wer_metric.update(all_predictions, all_targets)
-    bleu_score = bleu_metric.compute()
-    chrf_score = chrf_metric.compute()
-    wer_score = wer_metric.compute()
+    # Update metrics
+    bleu_score = bleu_metric(all_predictions, all_targets)
+    chrf_score = chrf_metric(all_predictions, all_targets)
+    wer_score = wer_metric(all_predictions, all_targets)
 
     model.train()
     return avg_loss, bleu_score, chrf_score, wer_score
